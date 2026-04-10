@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Virtual environment
+venv/
+.venv/
+env/
+ENV/
+
+# Distribution
+build/
+dist/
+*.egg-info/
+*.egg
+wheels/
+pip-wheel-metadata/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Secrets and keys — NEVER commit private keys or credentials
+*.key
+*.pem
+*.enc
+secure_storage.enc
+secrets.json
+
+# Logs
+*.log
+logs/
+
+# Build artifacts
+*.exe
+*.spec
+*.pdf
+*.pptx
+
+# WireGuard config files — contain private keys, never commit
+*.conf
+
+# Distribution packages
+SecureVPN-*.zip
+SecureVPN-installer*.exe
