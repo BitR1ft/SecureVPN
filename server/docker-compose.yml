@@ -1,0 +1,136 @@
+# SecureVPN Server — Docker Compose
+# ====================================
+# Production deployment with:
+#   - wg-api:   Gunicorn Flask API (non-root)
+#   - nginx:    TLS-terminating reverse proxy
+#
+# WireGuard itself runs on the HOST kernel (not in a container).
+# The wg-api container needs CAP_NET_ADMIN only to call `wg` CLI tool.
+#
+# Usage:
+#   docker compose up -d
+#   docker compose logs -f wg-api
+#   docker compose exec wg-api journalctl -u wg-api -f
+
+services:
+
+  # ── WireGuard API (Gunicorn) ──────────────────────────────────────────
+  wg-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: securevpn-api
+    restart: unless-stopped
+
+    # Required to run `wg` CLI commands against the host kernel WireGuard
+    cap_add:
+      - NET_ADMIN
+
+    # Expose to host network for `wg` commands to reach the WireGuard interface
+    network_mode: host
+
+    environment:
+      SERVER_ENDPOINT: "${SERVER_ENDPOINT:?Set SERVER_ENDPOINT in .env}"
+      PYTHONPATH: /app/wg-api
+      PYTHONUNBUFFERED: "1"
+      LOG_LEVEL: "INFO"
+
+    volumes:
+      # WireGuard config — mounted read-only; wg commands write via `sudo wg set`
+      - /etc/wireguard:/etc/wireguard:ro
+      # Persistent API config (api_key.secret, env)
+      - wg_api_config:/opt/wg-api/config
+      # Persistent logs
+      - wg_api_logs:/opt/wg-api/logs
+      # UNIX socket shared with nginx container
+      - wg_api_socket:/run/wg-api
+
+    healthcheck:
+      test: ["CMD", "python3", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/v1/health', timeout=3)"]
+      interval: 30s
+      timeout:   5s
+      retries:   3
+      start_period: 15s
+
+    # Resource limits — prevent a DoS from consuming all server memory
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          memory: 128M
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ── Nginx TLS Reverse Proxy ───────────────────────────────────────────
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: securevpn-nginx
+    restart: unless-stopped
+    depends_on:
+      wg-api:
+        condition: service_healthy
+
+    ports:
+      - "443:443"
+      - "80:80"
+
+    volumes:
+      - ./nginx/wg-api.conf:/etc/nginx/conf.d/wg-api.conf:ro
+      - /etc/ssl/wg-api:/etc/ssl/wg-api:ro
+      - wg_api_socket:/run/wg-api:ro   # Read the UNIX socket
+
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Redis (Shared Rate-Limit State) ───────────────────────────────────
+  # Fix 5: Redis provides a single shared rate-limit counter for all
+  # Gunicorn workers. memory:// would give each worker its own counter.
+  redis:
+    image: redis:7-alpine
+    container_name: securevpn-redis
+    restart: unless-stopped
+    # Bind to loopback only (no external exposure)
+    command: redis-server --bind 127.0.0.1 --save "" --appendonly no
+    network_mode: host
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+# ── Named volumes ─────────────────────────────────────────────────────────
+volumes:
+  wg_api_config:
+    driver: local
+  wg_api_logs:
+    driver: local
+  wg_api_socket:
+    driver: local

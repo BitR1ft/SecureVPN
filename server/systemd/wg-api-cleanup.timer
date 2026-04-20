@@ -1,0 +1,19 @@
+# SecureVPN Server — peer TTL audit timer
+# =========================================
+# Runs wg-api-cleanup.service once per day at 03:00 UTC.
+# Enable with: systemctl enable --now wg-api-cleanup.timer
+
+[Unit]
+Description=SecureVPN Daily Peer Audit Timer
+Requires=wg-api.service
+
+[Timer]
+# Run daily at 03:00 UTC (low-traffic window)
+OnCalendar=*-*-* 03:00:00
+# Run immediately if last run was missed (e.g. server was down)
+Persistent=true
+# Random delay up to 5 minutes to avoid thundering herd on fleet deployments
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

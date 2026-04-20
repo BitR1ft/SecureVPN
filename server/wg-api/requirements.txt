@@ -1,0 +1,26 @@
+# SecureVPN Server Dependencies
+# =============================
+# Install: pip3 install -r requirements.txt
+
+# Web Framework
+flask==3.0.3
+flask-limiter==3.7.0
+flask-cors==5.0.0
+
+# Production WSGI Server (replaces Flask dev server)
+gunicorn==21.2.0
+
+# Fix 5 (Dr. E): Redis for shared rate-limit state across Gunicorn workers
+# memory:// storage is per-process; Redis is the only correct shared store
+redis==5.0.1
+
+# Cryptography
+cryptography==42.0.5
+pycryptodome==3.21.0
+numpy==2.0.1
+
+# Structured JSON Logging
+python-json-logger==2.0.7
+
+# Utilities
+requests==2.32.3

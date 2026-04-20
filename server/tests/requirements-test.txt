@@ -1,0 +1,13 @@
+# SecureVPN Test Dependencies
+# ============================
+# Install: pip install -r tests/requirements-test.txt
+
+pytest==7.4.4
+pytest-mock==3.12.0
+pytest-cov==4.1.0        # Coverage reporting
+requests-mock==1.11.0    # Mock HTTP requests in client tests
+
+# These are also needed (from main requirements.txt)
+# flask==2.3.3
+# numpy==1.24.3
+# cryptography==41.0.7

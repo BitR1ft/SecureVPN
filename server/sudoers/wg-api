@@ -1,0 +1,35 @@
+# SecureVPN API — wg-api sudoers rules (Fix 8 revision)
+# ========================================================
+# File: /etc/sudoers.d/wg-api
+#
+# Fix 8 (Dr. H — Sudoers Wildcard Anti-Pattern):
+#
+# ORIGINAL (INSECURE):
+#   wg-api ALL=(root) NOPASSWD: /usr/bin/wg set wg0 peer * preshared-key /dev/stdin allowed-ips *
+#
+# WHY THIS IS DANGEROUS:
+#   The `*` wildcards in sudoers match ANY string, including shell flags like:
+#     "--listen-port 0" or "--fwmark 0" or "remove" injected via the peer public key.
+#   If the Python-side validation logic in wg_manager.py ever regresses (bug,
+#   refactor, dependency change), the wildcard passes arbitrary arguments
+#   directly to the kernel WireGuard interface in root context.
+#
+# FIX — Zero-wildcard wrapper scripts:
+#   Instead of calling /usr/bin/wg directly with wildcards, we authorize
+#   ONLY three root-owned wrapper scripts. Each wrapper validates its
+#   arguments independently with strict bash regexes before calling wg.
+#
+#   Defence in depth: even if Python validation fails, the wrapper rejects
+#   invalid public keys, non-VPN-subnet IPs, and unknown subcommands.
+#
+# Wrapper scripts (all owned root:root 0755, installed by install.sh):
+#   /usr/local/sbin/wg-set-peer    — add/update peer (validates pubkey + IP)
+#   /usr/local/sbin/wg-remove-peer — remove peer    (validates pubkey only)
+#   /usr/local/sbin/wg-show        — read wg state  (whitelist of subcommands)
+
+Defaults:wg-api !requiretty
+
+# EXACT paths — no wildcards, no arguments in the sudoers rule
+wg-api ALL=(root) NOPASSWD: /usr/local/sbin/wg-set-peer
+wg-api ALL=(root) NOPASSWD: /usr/local/sbin/wg-remove-peer
+wg-api ALL=(root) NOPASSWD: /usr/local/sbin/wg-show

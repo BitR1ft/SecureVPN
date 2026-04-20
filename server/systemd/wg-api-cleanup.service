@@ -1,0 +1,36 @@
+# SecureVPN Server — systemd peer audit service
+# =================================================
+# Runs wg-api audit endpoint and logs expired peers.
+# Triggered by wg-api-cleanup.timer (daily).
+
+[Unit]
+Description=SecureVPN Peer TTL Audit
+After=wg-api.service
+Requires=wg-api.service
+
+[Service]
+Type=oneshot
+User=wg-api
+Group=wg-api
+
+# Call the audit endpoint and log the result
+# Peers older than 90 days are flagged in the response JSON
+ExecStart=/bin/bash -c '\
+    API_KEY=$(cat /opt/wg-api/config/api_key.secret); \
+    curl -sf -o /opt/wg-api/logs/peer-audit.json \
+        -H "X-API-Key: $API_KEY" \
+        "http://unix:/run/wg-api/wg-api.sock:/api/v1/audit-peers?max_age_days=90" \
+    && python3 -c " \
+import json, sys; \
+data = json.load(open(\"/opt/wg-api/logs/peer-audit.json\")); \
+expired = data.get(\"data\", {}).get(\"expired\", []); \
+print(f\"[AUDIT] {len(expired)} expired peer(s) detected\", flush=True) if expired else print(\"[AUDIT] All peers within TTL\", flush=True) \
+" \
+'
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=wg-api-audit
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,98 @@
+[Unit]
+Description=SecureVPN WireGuard API (Gunicorn)
+Documentation=https://github.com/yourteam/securevpn
+After=network-online.target wg-quick@wg0.service redis-server.service
+Wants=network-online.target wg-quick@wg0.service
+Before=nginx.service
+
+[Service]
+Type=simple
+User=wg-api
+Group=wg-api
+SupplementaryGroups=www-data
+WorkingDirectory=/opt/wg-api/wg-api
+
+# Runtime directory for UNIX socket and PID file
+# systemd auto-creates /run/wg-api owned by wg-api:www-data mode 0770
+RuntimeDirectory=wg-api
+RuntimeDirectoryMode=0770
+
+# Clean stale socket + PID from previous run (runs as root via + prefix)
+ExecStartPre=+/bin/rm -f /run/wg-api/wg-api.sock /run/wg-api/wg-api.pid
+
+# Environment
+Environment=SERVER_ENDPOINT=your-server-ip
+Environment=PYTHONPATH=/opt/wg-api/wg-api
+Environment=PYTHONUNBUFFERED=1
+
+# Gunicorn via UNIX socket — Nginx proxies to it
+ExecStart=/opt/wg-api/venv/bin/gunicorn \
+    --config /opt/wg-api/wg-api/gunicorn.conf.py \
+    wsgi:application
+
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+# ── Systemd Security Hardening ────────────────────────────────────────────
+ProtectSystem=strict
+ProtectHome=true
+
+# Write-allow paths (everything else under /opt and /etc is read-only)
+ReadWritePaths=/opt/wg-api/logs
+ReadWritePaths=/opt/wg-api/config
+ReadWritePaths=/opt/wg-api/peers
+ReadWritePaths=/run/wg-api
+
+# wg_manager.py writes peer blocks directly to wg0.conf (open + append).
+# It also reads server_public.key. Both are under /etc/wireguard.
+# With ProtectSystem=strict, /etc is read-only UNLESS explicitly listed.
+ReadWritePaths=/etc/wireguard/wg0.conf
+ReadWritePaths=/etc/wireguard/peers
+
+# Read-only access to the rest of /etc/wireguard (keys, etc.)
+ReadOnlyPaths=/etc/wireguard
+
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+
+# IMPORTANT: NoNewPrivileges is NOT set here.
+# The app uses `sudo` for WireGuard management commands (wg-set-peer,
+# wg-show, wg-remove-peer). NoNewPrivileges=true would block setuid in
+# the sudo child process, making ALL WireGuard operations fail with
+# "sudo: a password is required" or silent EPERM.
+# Security is maintained via sudoers rules (only specific wrapper scripts
+# can be run as root) and the restricted service environment.
+
+# IMPORTANT: MemoryDenyWriteExecute is NOT set here.
+# Python C extensions (numpy/OpenBLAS) use JIT compilation which requires
+# writable+executable memory. MDWE causes SIGKILL on import.
+
+# IMPORTANT: SystemCallFilter is relaxed compared to the original.
+# The original ~@privileged blocked setuid/setgid (needed by sudo).
+# The original ~@resources blocked sched_getaffinity (needed by Python's
+# os.cpu_count() → gunicorn.conf.py workers calculation) and capset/capget
+# (used by glibc thread creation). We only block @mount and @swap.
+SystemCallFilter=@system-service
+SystemCallFilter=~@mount @swap
+
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=wg-api
+
+[Install]
+WantedBy=multi-user.target
