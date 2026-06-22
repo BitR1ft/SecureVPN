@@ -1,7 +1,7 @@
 # SecureVPN
 
 **Post-Quantum WireGuard VPN — CS325 Network Security Project**  
-Air University · National Centre for Cyber Security (NCSA)
+Air University · National Centre for Cyber Security (NCSA)  
 By: Muhammad Adeel Haider (BitR1ft)
 
 ---
