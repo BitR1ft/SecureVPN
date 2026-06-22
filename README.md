@@ -2,6 +2,7 @@
 
 **Post-Quantum WireGuard VPN — CS325 Network Security Project**  
 Air University · National Centre for Cyber Security (NCSA)
+By: Muhammad Adeel Haider (BitR1ft)
 
 ---
 
@@ -170,7 +171,7 @@ git clone https://github.com/BitR1ft/SecureVPN.git
 cd SecureVPN/server
 
 # Run the automated installer (sets up WireGuard, API, systemd, firewall)
-sudo bash install.sh
+sudo bash install.sh IP
 ```
 
 The installer will:
